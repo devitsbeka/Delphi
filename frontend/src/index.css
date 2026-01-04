@@ -1,0 +1,391 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   DELPHI DESIGN SYSTEM
+   A dark, sophisticated command center aesthetic inspired by Palantir
+   =========================================================================== */
+
+:root {
+  /* Primary Colors */
+  --delphi-bg-primary: #0a0a0f;
+  --delphi-bg-secondary: #12121a;
+  --delphi-bg-elevated: #1a1a24;
+  --delphi-bg-hover: #22222e;
+  
+  /* Borders */
+  --delphi-border: #2a2a3a;
+  --delphi-border-hover: #3a3a4a;
+  
+  /* Text Colors */
+  --delphi-text-primary: #e8e8ec;
+  --delphi-text-secondary: #a8a8b0;
+  --delphi-text-muted: #606070;
+  
+  /* Accent Colors */
+  --delphi-accent: #4a9eff;
+  --delphi-accent-hover: #6ab0ff;
+  --delphi-success: #00d68f;
+  --delphi-warning: #ffaa00;
+  --delphi-error: #ff4757;
+  
+  /* Fonts */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+  --font-sans: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ===========================================================================
+   BASE STYLES
+   =========================================================================== */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--delphi-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--delphi-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--delphi-border-hover);
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  @apply antialiased;
+  font-family: var(--font-sans);
+  background-color: var(--delphi-bg-primary);
+  color: var(--delphi-text-primary);
+}
+
+/* ===========================================================================
+   TYPOGRAPHY
+   =========================================================================== */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-2xs {
+  font-size: 0.625rem;
+  line-height: 0.875rem;
+}
+
+/* ===========================================================================
+   COMPONENT UTILITIES
+   =========================================================================== */
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-delphi-bg-elevated border border-delphi-border rounded-xl p-5;
+    background: linear-gradient(
+      135deg,
+      rgba(26, 26, 36, 0.9) 0%,
+      rgba(18, 18, 26, 0.95) 100%
+    );
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200;
+  }
+
+  .card-hover:hover {
+    @apply border-delphi-accent/50;
+    box-shadow: 0 0 20px rgba(74, 158, 255, 0.1);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200;
+    @apply bg-gradient-to-r from-delphi-accent to-blue-600;
+    @apply text-white shadow-lg shadow-delphi-accent/25;
+    @apply hover:shadow-delphi-accent/40 hover:scale-[1.02];
+    @apply active:scale-[0.98];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200;
+    @apply bg-delphi-bg-primary border border-delphi-border;
+    @apply text-delphi-text-secondary;
+    @apply hover:border-delphi-accent/50 hover:text-delphi-text-primary;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200;
+    @apply text-delphi-text-muted;
+    @apply hover:bg-delphi-bg-hover hover:text-delphi-text-primary;
+  }
+
+  /* Inputs */
+  .input-primary {
+    @apply w-full px-4 py-2.5 text-sm rounded-lg transition-all duration-200;
+    @apply bg-delphi-bg-primary border border-delphi-border;
+    @apply text-delphi-text-primary placeholder:text-delphi-text-muted;
+    @apply focus:outline-none focus:border-delphi-accent focus:ring-1 focus:ring-delphi-accent/30;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .input-primary::placeholder {
+    color: var(--delphi-text-muted);
+  }
+
+  /* Labels */
+  .label {
+    @apply block text-sm text-delphi-text-secondary mb-1.5;
+  }
+
+  /* Status Indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-success {
+    @apply status-dot bg-delphi-success;
+    box-shadow: 0 0 8px var(--delphi-success);
+  }
+
+  .status-dot-warning {
+    @apply status-dot bg-delphi-warning;
+    box-shadow: 0 0 8px var(--delphi-warning);
+  }
+
+  .status-dot-error {
+    @apply status-dot bg-delphi-error;
+    box-shadow: 0 0 8px var(--delphi-error);
+  }
+
+  .status-dot-idle {
+    @apply status-dot bg-delphi-text-muted;
+  }
+
+  /* Sidebar */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200;
+    @apply text-delphi-text-muted;
+    @apply hover:bg-delphi-bg-hover hover:text-delphi-text-primary;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link;
+    @apply bg-delphi-accent/10 text-delphi-accent border-l-2 border-delphi-accent;
+  }
+}
+
+/* ===========================================================================
+   CUSTOM TAILWIND COLORS
+   =========================================================================== */
+
+@layer utilities {
+  .bg-delphi-bg-primary {
+    background-color: var(--delphi-bg-primary);
+  }
+  .bg-delphi-bg-secondary {
+    background-color: var(--delphi-bg-secondary);
+  }
+  .bg-delphi-bg-elevated {
+    background-color: var(--delphi-bg-elevated);
+  }
+  .bg-delphi-bg-hover {
+    background-color: var(--delphi-bg-hover);
+  }
+  .bg-delphi-accent {
+    background-color: var(--delphi-accent);
+  }
+  .bg-delphi-success {
+    background-color: var(--delphi-success);
+  }
+  .bg-delphi-warning {
+    background-color: var(--delphi-warning);
+  }
+  .bg-delphi-error {
+    background-color: var(--delphi-error);
+  }
+
+  .text-delphi-text-primary {
+    color: var(--delphi-text-primary);
+  }
+  .text-delphi-text-secondary {
+    color: var(--delphi-text-secondary);
+  }
+  .text-delphi-text-muted {
+    color: var(--delphi-text-muted);
+  }
+  .text-delphi-accent {
+    color: var(--delphi-accent);
+  }
+  .text-delphi-success {
+    color: var(--delphi-success);
+  }
+  .text-delphi-warning {
+    color: var(--delphi-warning);
+  }
+  .text-delphi-error {
+    color: var(--delphi-error);
+  }
+
+  .border-delphi-border {
+    border-color: var(--delphi-border);
+  }
+  .border-delphi-accent {
+    border-color: var(--delphi-accent);
+  }
+
+  .shadow-delphi-accent {
+    --tw-shadow-color: var(--delphi-accent);
+  }
+}
+
+/* ===========================================================================
+   ANIMATIONS
+   =========================================================================== */
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px var(--delphi-accent), 0 0 10px var(--delphi-accent);
+  }
+  50% {
+    box-shadow: 0 0 10px var(--delphi-accent), 0 0 20px var(--delphi-accent);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(74, 158, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* ===========================================================================
+   SPECIAL EFFECTS
+   =========================================================================== */
+
+/* Glow effect for active elements */
+.glow-accent {
+  box-shadow: 0 0 20px rgba(74, 158, 255, 0.3),
+              0 0 40px rgba(74, 158, 255, 0.1);
+}
+
+.glow-success {
+  box-shadow: 0 0 20px rgba(0, 214, 143, 0.3),
+              0 0 40px rgba(0, 214, 143, 0.1);
+}
+
+.glow-error {
+  box-shadow: 0 0 20px rgba(255, 71, 87, 0.3),
+              0 0 40px rgba(255, 71, 87, 0.1);
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(26, 26, 36, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Gradient text */
+.text-gradient-accent {
+  background: linear-gradient(135deg, var(--delphi-accent) 0%, #6ab0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Grid pattern background */
+.bg-grid {
+  background-image: 
+    linear-gradient(rgba(42, 42, 58, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42, 42, 58, 0.3) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Radial gradient overlay */
+.bg-radial-overlay {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    var(--delphi-bg-primary) 70%
+  );
+}
+
+/* ===========================================================================
+   CHART OVERRIDES
+   =========================================================================== */
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--delphi-border);
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* ===========================================================================
+   SCROLLBAR HIDING (for specific containers)
+   =========================================================================== */
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===========================================================================
+   SELECTION
+   =========================================================================== */
+
+::selection {
+  background-color: rgba(74, 158, 255, 0.3);
+  color: var(--delphi-text-primary);
+}
+
+/* ===========================================================================
+   FOCUS STYLES
+   =========================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--delphi-accent);
+  outline-offset: 2px;
+}

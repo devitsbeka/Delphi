@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Supabase Local Development Stack
+  # =============================================================================
+  postgres:
+    image: supabase/postgres:15.1.0.117
+    container_name: delphi-postgres
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Redis for Caching and Rate Limiting
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: delphi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Supabase Studio (Optional - for DB management)
+  # =============================================================================
+  supabase-studio:
+    image: supabase/studio:20231123-64a766a
+    container_name: delphi-studio
+    ports:
+      - "54323:3000"
+    environment:
+      STUDIO_PG_META_URL: http://postgres-meta:8080
+      POSTGRES_PASSWORD: postgres
+      DEFAULT_ORGANIZATION_NAME: Delphi
+      DEFAULT_PROJECT_NAME: Delphi Dev
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:54321
+    depends_on:
+      - postgres
+
+  # =============================================================================
+  # Backend API (Development)
+  # =============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: delphi-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - full
+
+  # =============================================================================
+  # Ollama for Local LLM Development
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: delphi-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles:
+      - llm
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+
+networks:
+  default:
+    name: delphi-network
+
