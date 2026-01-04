@@ -9,66 +9,43 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/delphi-platform/delphi/backend/internal/config"
-	"github.com/delphi-platform/delphi/backend/internal/handlers"
-	"github.com/delphi-platform/delphi/backend/internal/middleware"
-	"github.com/delphi-platform/delphi/backend/internal/repository"
-	"github.com/delphi-platform/delphi/backend/internal/services"
-	"github.com/delphi-platform/delphi/backend/pkg/logger"
-
 	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/httprate"
+	"go.uber.org/zap"
 )
 
 func main() {
 	// Initialize logger
-	log := logger.New()
-	defer log.Sync()
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+	log := logger.Sugar()
 
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatal("Failed to load configuration", "error", err)
+	// Get port from environment
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	// Initialize database connection
-	db, err := repository.NewPostgresDB(cfg.DatabaseURL)
-	if err != nil {
-		log.Fatal("Failed to connect to database", "error", err)
+	// Get frontend URL for CORS
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "*"
 	}
-	defer db.Close()
-
-	// Initialize Redis
-	redis, err := repository.NewRedisClient(cfg.RedisURL)
-	if err != nil {
-		log.Fatal("Failed to connect to Redis", "error", err)
-	}
-	defer redis.Close()
-
-	// Initialize repositories
-	repos := repository.NewRepositories(db)
-
-	// Initialize services
-	svc := services.NewServices(cfg, repos, redis, log)
-
-	// Initialize handlers
-	h := handlers.NewHandlers(svc, log)
 
 	// Setup router
 	r := chi.NewRouter()
 
 	// Global middleware
-	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
-	r.Use(middleware.Logger(log))
-	r.Use(chimiddleware.Recoverer)
-	r.Use(chimiddleware.Compress(5))
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Compress(5))
 
 	// CORS configuration
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{cfg.FrontendURL},
+		AllowedOrigins:   []string{frontendURL, "http://localhost:5173", "https://*.vercel.app"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Tenant-ID"},
 		ExposedHeaders:   []string{"Link", "X-Request-ID"},
@@ -76,197 +53,46 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Rate limiting
-	r.Use(httprate.LimitByIP(100, time.Minute))
+	// Health check endpoints
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"healthy","service":"delphi-api","version":"1.0.0"}`))
+	})
 
-	// Health check (no auth required)
-	r.Get("/health", h.Health.Check)
-	r.Get("/ready", h.Health.Ready)
+	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ready"}`))
+	})
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// Public routes
-		r.Group(func(r chi.Router) {
-			r.Post("/auth/login", h.Auth.Login)
-			r.Post("/auth/register", h.Auth.Register)
-			r.Post("/auth/refresh", h.Auth.RefreshToken)
-			r.Post("/auth/forgot-password", h.Auth.ForgotPassword)
-		})
+		// Auth endpoints (simplified for demo)
+		r.Post("/auth/login", handleLogin)
+		r.Post("/auth/register", handleRegister)
+		r.Post("/auth/refresh", handleRefresh)
 
-		// Protected routes
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.Authenticate(svc.Auth))
-			r.Use(middleware.TenantContext())
+		// Demo data endpoints
+		r.Get("/agents", handleListAgents)
+		r.Post("/agents", handleCreateAgent)
+		r.Get("/agents/{agentID}", handleGetAgent)
+		r.Patch("/agents/{agentID}", handleUpdateAgent)
+		r.Delete("/agents/{agentID}", handleDeleteAgent)
+		r.Post("/agents/{agentID}/launch", handleLaunchAgent)
+		r.Post("/agents/{agentID}/pause", handlePauseAgent)
+		r.Post("/agents/{agentID}/terminate", handleTerminateAgent)
 
-			// User profile
-			r.Get("/me", h.User.GetProfile)
-			r.Patch("/me", h.User.UpdateProfile)
-			r.Post("/me/password", h.User.ChangePassword)
-
-			// Tenants
-			r.Route("/tenants", func(r chi.Router) {
-				r.Get("/", h.Tenant.List)
-				r.Post("/", h.Tenant.Create)
-				r.Get("/{tenantID}", h.Tenant.Get)
-				r.Patch("/{tenantID}", h.Tenant.Update)
-			})
-
-			// API Keys (Provider credentials)
-			r.Route("/api-keys", func(r chi.Router) {
-				r.Get("/", h.APIKey.List)
-				r.Post("/", h.APIKey.Create)
-				r.Delete("/{keyID}", h.APIKey.Delete)
-				r.Post("/{keyID}/validate", h.APIKey.Validate)
-			})
-
-			// Agents
-			r.Route("/agents", func(r chi.Router) {
-				r.Get("/", h.Agent.List)
-				r.Post("/", h.Agent.Create)
-				r.Get("/templates", h.Agent.ListTemplates)
-				r.Get("/{agentID}", h.Agent.Get)
-				r.Patch("/{agentID}", h.Agent.Update)
-				r.Delete("/{agentID}", h.Agent.Delete)
-				r.Post("/{agentID}/launch", h.Agent.Launch)
-				r.Post("/{agentID}/pause", h.Agent.Pause)
-				r.Post("/{agentID}/terminate", h.Agent.Terminate)
-				r.Get("/{agentID}/runs", h.Agent.ListRuns)
-				r.Get("/{agentID}/runs/{runID}", h.Agent.GetRun)
-				r.Get("/{agentID}/runs/{runID}/logs", h.Agent.GetRunLogs)
-			})
-
-			// Agent execution (prompts/tasks)
-			r.Route("/execute", func(r chi.Router) {
-				r.Post("/", h.Execute.Create)
-				r.Get("/{executionID}", h.Execute.Get)
-				r.Post("/{executionID}/cancel", h.Execute.Cancel)
-			})
-
-			// Knowledge bases
-			r.Route("/knowledge", func(r chi.Router) {
-				r.Get("/", h.Knowledge.List)
-				r.Post("/", h.Knowledge.Create)
-				r.Get("/{kbID}", h.Knowledge.Get)
-				r.Patch("/{kbID}", h.Knowledge.Update)
-				r.Delete("/{kbID}", h.Knowledge.Delete)
-				r.Post("/{kbID}/documents", h.Knowledge.UploadDocument)
-				r.Get("/{kbID}/documents", h.Knowledge.ListDocuments)
-				r.Delete("/{kbID}/documents/{docID}", h.Knowledge.DeleteDocument)
-				r.Post("/{kbID}/query", h.Knowledge.Query)
-			})
-
-			// Repositories
-			r.Route("/repositories", func(r chi.Router) {
-				r.Get("/", h.Repository.List)
-				r.Post("/", h.Repository.Connect)
-				r.Get("/{repoID}", h.Repository.Get)
-				r.Delete("/{repoID}", h.Repository.Disconnect)
-				r.Post("/{repoID}/sync", h.Repository.Sync)
-				r.Get("/{repoID}/branches", h.Repository.ListBranches)
-				r.Get("/{repoID}/commits", h.Repository.ListCommits)
-				r.Get("/{repoID}/prs", h.Repository.ListPRs)
-			})
-
-			// Businesses
-			r.Route("/businesses", func(r chi.Router) {
-				r.Get("/", h.Business.List)
-				r.Post("/", h.Business.Create)
-				r.Get("/{businessID}", h.Business.Get)
-				r.Patch("/{businessID}", h.Business.Update)
-				r.Delete("/{businessID}", h.Business.Delete)
-
-				// Projects under business
-				r.Route("/{businessID}/projects", func(r chi.Router) {
-					r.Get("/", h.Project.List)
-					r.Post("/", h.Project.Create)
-					r.Get("/{projectID}", h.Project.Get)
-					r.Patch("/{projectID}", h.Project.Update)
-					r.Delete("/{projectID}", h.Project.Delete)
-				})
-			})
-
-			// Financial
-			r.Route("/financial", func(r chi.Router) {
-				r.Get("/accounts", h.Financial.ListAccounts)
-				r.Post("/accounts", h.Financial.CreateAccount)
-				r.Get("/transactions", h.Financial.ListTransactions)
-				r.Post("/transactions", h.Financial.CreateTransaction)
-				r.Get("/reports", h.Financial.GetReports)
-				r.Get("/budgets", h.Financial.ListBudgets)
-				r.Post("/budgets", h.Financial.CreateBudget)
-			})
-
-			// Social media
-			r.Route("/social", func(r chi.Router) {
-				r.Get("/accounts", h.Social.ListAccounts)
-				r.Post("/accounts/connect", h.Social.ConnectAccount)
-				r.Delete("/accounts/{accountID}", h.Social.DisconnectAccount)
-				r.Get("/posts", h.Social.ListPosts)
-				r.Post("/posts", h.Social.CreatePost)
-				r.Patch("/posts/{postID}", h.Social.UpdatePost)
-				r.Post("/posts/{postID}/schedule", h.Social.SchedulePost)
-				r.Post("/posts/{postID}/publish", h.Social.PublishPost)
-				r.Get("/analytics", h.Social.GetAnalytics)
-			})
-
-			// IoT
-			r.Route("/iot", func(r chi.Router) {
-				r.Get("/devices", h.IoT.ListDevices)
-				r.Post("/devices", h.IoT.RegisterDevice)
-				r.Get("/devices/{deviceID}", h.IoT.GetDevice)
-				r.Patch("/devices/{deviceID}", h.IoT.UpdateDevice)
-				r.Delete("/devices/{deviceID}", h.IoT.DeleteDevice)
-				r.Post("/devices/{deviceID}/command", h.IoT.SendCommand)
-				r.Get("/devices/{deviceID}/telemetry", h.IoT.GetTelemetry)
-			})
-
-			// Cost tracking
-			r.Route("/costs", func(r chi.Router) {
-				r.Get("/summary", h.Cost.GetSummary)
-				r.Get("/by-agent", h.Cost.ByAgent)
-				r.Get("/by-provider", h.Cost.ByProvider)
-				r.Get("/history", h.Cost.GetHistory)
-				r.Get("/limits", h.Cost.GetLimits)
-				r.Patch("/limits", h.Cost.UpdateLimits)
-			})
-
-			// Dashboard data
-			r.Route("/dashboard", func(r chi.Router) {
-				r.Get("/overview", h.Dashboard.Overview)
-				r.Get("/agents-status", h.Dashboard.AgentsStatus)
-				r.Get("/recent-activity", h.Dashboard.RecentActivity)
-				r.Get("/cost-trends", h.Dashboard.CostTrends)
-				r.Get("/widgets/{widgetID}", h.Dashboard.GetWidget)
-			})
-
-			// Audit logs
-			r.Route("/audit", func(r chi.Router) {
-				r.Get("/", h.Audit.List)
-				r.Get("/export", h.Audit.Export)
-			})
-
-			// Settings
-			r.Route("/settings", func(r chi.Router) {
-				r.Get("/", h.Settings.Get)
-				r.Patch("/", h.Settings.Update)
-				r.Get("/integrations", h.Settings.ListIntegrations)
-				r.Post("/integrations/{integration}", h.Settings.ConfigureIntegration)
-			})
-		})
-
-		// Webhook endpoints (authenticated via signature)
-		r.Route("/webhooks", func(r chi.Router) {
-			r.Post("/github", h.Webhook.GitHub)
-			r.Post("/stripe", h.Webhook.Stripe)
-		})
+		r.Get("/dashboard/overview", handleDashboardOverview)
+		r.Get("/repositories", handleListRepositories)
+		r.Get("/knowledge", handleListKnowledgeBases)
+		r.Get("/businesses", handleListBusinesses)
+		r.Get("/costs/summary", handleCostsSummary)
 	})
-
-	// WebSocket endpoint for real-time updates
-	r.Get("/ws", h.WebSocket.Handle)
 
 	// Create server
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.APIPort),
+		Addr:         fmt.Sprintf(":%s", port),
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -275,9 +101,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Info("Starting server", "port", cfg.APIPort, "env", cfg.Environment)
+		log.Infof("Starting Delphi API server on port %s", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("Server failed", "error", err)
+			log.Fatalf("Server failed: %v", err)
 		}
 	}()
 
@@ -292,9 +118,271 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown", "error", err)
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
 	log.Info("Server stopped")
 }
 
+// ============================================================================
+// Handlers - Simplified for initial deployment
+// ============================================================================
+
+func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if data != nil {
+		if str, ok := data.(string); ok {
+			w.Write([]byte(str))
+		}
+	}
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{
+		"token": "demo-jwt-token-abc123",
+		"user": {
+			"id": "user-1",
+			"email": "demo@delphi.io",
+			"name": "Demo User",
+			"tenant_id": "tenant-1",
+			"role": "admin",
+			"preferences": {},
+			"created_at": "2024-01-01T00:00:00Z",
+			"updated_at": "2024-01-01T00:00:00Z"
+		}
+	}`)
+}
+
+func handleRegister(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusCreated, `{
+		"token": "demo-jwt-token-abc123",
+		"user": {
+			"id": "user-new",
+			"email": "newuser@delphi.io",
+			"name": "New User",
+			"tenant_id": "tenant-1",
+			"role": "admin",
+			"preferences": {},
+			"created_at": "2024-01-01T00:00:00Z",
+			"updated_at": "2024-01-01T00:00:00Z"
+		}
+	}`)
+}
+
+func handleRefresh(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{"token": "demo-jwt-token-refreshed"}`)
+}
+
+func handleListAgents(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `[
+		{
+			"id": "agent-1",
+			"name": "Code Oracle",
+			"description": "Expert code generation and review agent",
+			"purpose": "coding",
+			"goal": "Automate code generation and review for all repositories",
+			"model_provider": "openai",
+			"model": "gpt-4o",
+			"status": "ready",
+			"system_prompt": "You are an expert Go and TypeScript developer.",
+			"organization_id": "org-1",
+			"created_at": "2024-01-01T12:00:00Z",
+			"updated_at": "2024-01-01T12:00:00Z"
+		},
+		{
+			"id": "agent-2",
+			"name": "Marketing Guru",
+			"description": "Creates engaging marketing content and campaigns",
+			"purpose": "content",
+			"goal": "Increase brand awareness and social engagement",
+			"model_provider": "anthropic",
+			"model": "claude-3-opus-20240229",
+			"status": "executing",
+			"system_prompt": "You are a creative marketing specialist focused on viral content.",
+			"organization_id": "org-1",
+			"created_at": "2024-01-02T12:00:00Z",
+			"updated_at": "2024-01-02T12:00:00Z"
+		},
+		{
+			"id": "agent-3",
+			"name": "Financial Analyst",
+			"description": "Monitors financial data and generates reports",
+			"purpose": "analysis",
+			"goal": "Provide accurate financial insights and forecasts",
+			"model_provider": "google",
+			"model": "gemini-pro",
+			"status": "paused",
+			"system_prompt": "You are a meticulous financial analyst with expertise in startups.",
+			"organization_id": "org-1",
+			"created_at": "2024-01-03T12:00:00Z",
+			"updated_at": "2024-01-03T12:00:00Z"
+		},
+		{
+			"id": "agent-4",
+			"name": "DevOps Engineer",
+			"description": "Manages CI/CD pipelines and infrastructure",
+			"purpose": "devops",
+			"goal": "Ensure 99.9% uptime and fast deployments",
+			"model_provider": "openai",
+			"model": "gpt-4o",
+			"status": "briefing",
+			"system_prompt": "You are an expert DevOps engineer with Kubernetes and Terraform expertise.",
+			"organization_id": "org-1",
+			"created_at": "2024-01-04T12:00:00Z",
+			"updated_at": "2024-01-04T12:00:00Z"
+		},
+		{
+			"id": "agent-5",
+			"name": "Support Assistant",
+			"description": "Handles customer inquiries and provides 24/7 support",
+			"purpose": "support",
+			"goal": "Maintain 95% customer satisfaction rate",
+			"model_provider": "ollama",
+			"model": "llama2",
+			"status": "ready",
+			"system_prompt": "You are a helpful and empathetic customer support agent.",
+			"organization_id": "org-1",
+			"created_at": "2024-01-05T12:00:00Z",
+			"updated_at": "2024-01-05T12:00:00Z"
+		}
+	]`)
+}
+
+func handleCreateAgent(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusCreated, `{
+		"id": "agent-new",
+		"name": "New Agent",
+		"description": "Newly created agent",
+		"purpose": "custom",
+		"goal": "Custom goal",
+		"model_provider": "openai",
+		"model": "gpt-4o",
+		"status": "configured",
+		"system_prompt": "You are a helpful assistant.",
+		"organization_id": "org-1",
+		"created_at": "2024-01-06T12:00:00Z",
+		"updated_at": "2024-01-06T12:00:00Z"
+	}`)
+}
+
+func handleGetAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentID")
+	jsonResponse(w, http.StatusOK, fmt.Sprintf(`{
+		"id": "%s",
+		"name": "Code Oracle",
+		"description": "Expert code generation and review agent",
+		"purpose": "coding",
+		"goal": "Automate code generation and review",
+		"model_provider": "openai",
+		"model": "gpt-4o",
+		"status": "ready",
+		"system_prompt": "You are an expert developer.",
+		"organization_id": "org-1",
+		"created_at": "2024-01-01T12:00:00Z",
+		"updated_at": "2024-01-01T12:00:00Z"
+	}`, agentID))
+}
+
+func handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentID")
+	jsonResponse(w, http.StatusOK, fmt.Sprintf(`{
+		"id": "%s",
+		"name": "Updated Agent",
+		"description": "Updated description",
+		"purpose": "coding",
+		"goal": "Updated goal",
+		"model_provider": "openai",
+		"model": "gpt-4o",
+		"status": "configured",
+		"system_prompt": "Updated system prompt.",
+		"organization_id": "org-1",
+		"created_at": "2024-01-01T12:00:00Z",
+		"updated_at": "2024-01-06T12:00:00Z"
+	}`, agentID))
+}
+
+func handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{"message": "Agent deleted successfully"}`)
+}
+
+func handleLaunchAgent(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{"message": "Agent launched successfully", "status": "ready"}`)
+}
+
+func handlePauseAgent(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{"message": "Agent paused", "status": "paused"}`)
+}
+
+func handleTerminateAgent(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{"message": "Agent terminated", "status": "terminated"}`)
+}
+
+func handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{
+		"totalAgents": 15,
+		"activeAgents": 8,
+		"totalSpendYTD": 2847.56,
+		"monthlySpend": 487.32,
+		"agentStatusDistribution": {
+			"ready": 5,
+			"executing": 3,
+			"paused": 2,
+			"error": 1,
+			"configured": 3,
+			"briefing": 1
+		},
+		"recentActivities": [
+			{"id": "act1", "agentName": "Code Oracle", "type": "commit", "description": "Pushed 3 commits to dev/feature-auth", "timestamp": "2024-01-06T10:00:00Z", "status": "success"},
+			{"id": "act2", "agentName": "Marketing Guru", "type": "post", "description": "Published Twitter thread", "timestamp": "2024-01-06T09:30:00Z", "status": "success"},
+			{"id": "act3", "agentName": "Financial Analyst", "type": "report", "description": "Generated Q4 financial report", "timestamp": "2024-01-06T09:00:00Z", "status": "success"},
+			{"id": "act4", "agentName": "DevOps Engineer", "type": "deploy", "description": "Deployed v2.1.0 to production", "timestamp": "2024-01-06T08:30:00Z", "status": "success"},
+			{"id": "act5", "agentName": "Support Assistant", "type": "ticket", "description": "Resolved 12 support tickets", "timestamp": "2024-01-06T08:00:00Z", "status": "success"}
+		]
+	}`)
+}
+
+func handleListRepositories(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `[
+		{"id": "repo-1", "name": "delphi-platform", "url": "https://github.com/devitsbeka/Delphi", "status": "connected", "branch_strategy": "gitflow"},
+		{"id": "repo-2", "name": "game-studio-apps", "url": "https://github.com/gamestudio/apps", "status": "connected", "branch_strategy": "github-flow"},
+		{"id": "repo-3", "name": "saas-backend", "url": "https://github.com/company/saas-backend", "status": "syncing", "branch_strategy": "trunk-based"}
+	]`)
+}
+
+func handleListKnowledgeBases(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `[
+		{"id": "kb-1", "name": "Company Documentation", "type": "document", "document_count": 156},
+		{"id": "kb-2", "name": "Codebase Context", "type": "repository", "document_count": 2340},
+		{"id": "kb-3", "name": "Product Requirements", "type": "manual", "document_count": 45}
+	]`)
+}
+
+func handleListBusinesses(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `[
+		{"id": "biz-1", "name": "Game Studio", "description": "Mobile game development studio with 30+ apps", "industry": "Gaming"},
+		{"id": "biz-2", "name": "Crash Games Inc", "description": "Crash game development company", "industry": "Gaming"},
+		{"id": "biz-3", "name": "SaaS Ventures", "description": "Multiple SaaS startup projects", "industry": "Software"}
+	]`)
+}
+
+func handleCostsSummary(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, `{
+		"totalSpendYTD": 2847.56,
+		"monthlySpend": 487.32,
+		"dailyAverage": 15.73,
+		"byProvider": {
+			"openai": 1523.45,
+			"anthropic": 876.23,
+			"google": 312.88,
+			"ollama": 135.00
+		},
+		"byAgent": {
+			"Code Oracle": 892.34,
+			"Marketing Guru": 567.23,
+			"Financial Analyst": 445.67,
+			"DevOps Engineer": 534.12,
+			"Support Assistant": 408.20
+		}
+	}`)
+}

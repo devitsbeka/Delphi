@@ -1,0 +1,12 @@
+# Ignore complex internal packages for now
+internal/
+pkg/
+tests/
+
+# Other ignores
+*.md
+.air.toml
+Dockerfile.dev
+.git
+.gitignore
+
