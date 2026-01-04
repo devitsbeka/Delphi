@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
-import { useAuthStore } from '../stores/auth'
+import useAuthStore from '../stores/auth'
 
 const navigation = [
   { name: 'Dashboard', path: '/', icon: '◆' },
@@ -14,7 +14,7 @@ const navigation = [
   { name: 'Settings', path: '/settings', icon: '⚙' },
 ]
 
-export function Layout() {
+export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()

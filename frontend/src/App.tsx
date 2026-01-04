@@ -1,26 +1,21 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
-import { useAuthStore } from './stores/auth'
-import { Layout } from './components/Layout'
-import { Login } from './pages/Login'
-import { Register } from './pages/Register'
-import { Dashboard } from './pages/Dashboard'
-import { Agents } from './pages/Agents'
-import { AgentDetail } from './pages/AgentDetail'
-import { Execute } from './pages/Execute'
-import { Knowledge } from './pages/Knowledge'
-import { Repositories } from './pages/Repositories'
-import { Businesses } from './pages/Businesses'
-import { Costs } from './pages/Costs'
-import { Settings } from './pages/Settings'
+import useAuthStore from './stores/auth'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Dashboard from './pages/Dashboard'
+import Agents from './pages/Agents'
+import AgentDetail from './pages/AgentDetail'
+import Execute from './pages/Execute'
+import Knowledge from './pages/Knowledge'
+import Repositories from './pages/Repositories'
+import Businesses from './pages/Businesses'
+import Costs from './pages/Costs'
+import Settings from './pages/Settings'
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, checkAuth } = useAuthStore()
-
-  useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+  const { isAuthenticated } = useAuthStore()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />

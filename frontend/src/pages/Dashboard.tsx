@@ -12,7 +12,7 @@ import {
 } from '../components/Charts'
 import StatusBadge from '../components/StatusBadge'
 import MetricCard from '../components/MetricCard'
-import { useAgentStore } from '../stores/agents'
+import useAgentsStore from '../stores/agents'
 
 // Mock data for demonstration
 const mockActivityData = Array.from({ length: 14 }, (_, i) => ({
@@ -71,8 +71,8 @@ const mockRecentExecutions = [
 
 const mockSparklineData = [12, 15, 8, 22, 18, 25, 20, 28, 24, 30, 26, 32]
 
-export function Dashboard() {
-  const { fetchAgents } = useAgentStore()
+export default function Dashboard() {
+  const { fetchAgents } = useAgentsStore()
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {

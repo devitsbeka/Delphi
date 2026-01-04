@@ -45,7 +45,7 @@ const mockBusinessCosts = [
 
 type TimeRange = '7d' | '14d' | '30d' | '90d'
 
-export function Costs() {
+export default function Costs() {
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
 
   const timeSeriesData = useMemo(() => {

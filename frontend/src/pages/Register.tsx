@@ -1,28 +1,31 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuthStore } from '../stores/auth'
+import useAuthStore from '../stores/auth'
 
-export function Register() {
+export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const { register, loading, error, clearError } = useAuthStore()
+  const [error, setError] = useState('')
+  const { register, loading } = useAuthStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
     if (password !== confirmPassword) {
+      setError('Passwords do not match')
       return
     }
 
     try {
-      await register(email, password, name)
+      await register(name, email, password)
       navigate('/')
     } catch {
-      // Error is handled in store
+      setError('Registration failed. Please try again.')
     }
   }
 
@@ -62,10 +65,7 @@ export function Register() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
                 className="input-primary w-full"
                 required
@@ -77,10 +77,7 @@ export function Register() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="input-primary w-full"
                 required
@@ -92,10 +89,7 @@ export function Register() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="input-primary w-full"
                 minLength={8}
@@ -108,10 +102,7 @@ export function Register() {
               <input
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
                 className={`input-primary w-full ${!passwordsMatch ? 'border-delphi-error focus:border-delphi-error' : ''}`}
                 required

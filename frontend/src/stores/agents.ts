@@ -1,113 +1,180 @@
 import { create } from 'zustand'
-import { apiClient } from '../services/api'
-import type { Agent } from '../types'
+import { agentsAPI, executeAPI } from '../services/api'
+import { Agent } from '../types'
+import { toast } from 'react-hot-toast'
 
-interface AgentState {
-  agents: Agent[]
-  currentAgent: Agent | null
-  loading: boolean
-  error: string | null
-
-  fetchAgents: () => Promise<void>
-  fetchAgent: (id: string) => Promise<void>
-  createAgent: (data: Partial<Agent>) => Promise<void>
-  updateAgent: (id: string, data: Partial<Agent>) => Promise<void>
-  deleteAgent: (id: string) => Promise<void>
-  clearError: () => void
+export interface Execution {
+  id: string
+  agent_id: string
+  agent_name: string
+  prompt: string
+  response: string
+  status: 'running' | 'completed' | 'failed'
+  provider: string
+  model: string
+  tokens_used: number
+  cost_usd: number
+  start_time: string
+  end_time: string
+  error_message?: string
 }
 
-export const useAgentStore = create<AgentState>((set) => ({
+interface AgentsState {
+  agents: Agent[]
+  executions: Execution[]
+  loading: boolean
+  executing: boolean
+  error: string | null
+  fetchAgents: () => Promise<void>
+  createAgent: (agent: Partial<Agent>) => Promise<void>
+  updateAgent: (id: string, agent: Partial<Agent>) => Promise<void>
+  deleteAgent: (id: string) => Promise<void>
+  launchAgent: (id: string) => Promise<void>
+  pauseAgent: (id: string) => Promise<void>
+  terminateAgent: (id: string) => Promise<void>
+  executeAgent: (agentId: string, prompt: string) => Promise<Execution>
+  fetchExecutions: () => Promise<void>
+}
+
+const useAgentsStore = create<AgentsState>((set) => ({
   agents: [],
-  currentAgent: null,
+  executions: [],
   loading: false,
+  executing: false,
   error: null,
 
   fetchAgents: async () => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get('/agents')
-      const agents = Array.isArray(response.data) ? response.data : response.data.agents || []
-      set({ agents, loading: false })
+      const response = await agentsAPI.list()
+      set({ agents: response.data, loading: false })
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      set({
-        error: err.response?.data?.message || 'Failed to fetch agents',
-        loading: false,
-      })
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      set({ error: message, loading: false })
     }
   },
 
-  fetchAgent: async (id: string) => {
+  createAgent: async (newAgentData) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get(`/agents/${id}`)
-      set({ currentAgent: response.data, loading: false })
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      set({
-        error: err.response?.data?.message || 'Failed to fetch agent',
-        loading: false,
-      })
-    }
-  },
-
-  createAgent: async (data: Partial<Agent>) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.post('/agents', data as Record<string, unknown>)
-      const newAgent = response.data
+      const response = await agentsAPI.create(newAgentData)
       set((state) => ({
-        agents: [...state.agents, newAgent],
+        agents: [...state.agents, response.data],
         loading: false,
       }))
+      toast.success('Oracle created!')
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      set({
-        error: err.response?.data?.message || 'Failed to create agent',
-        loading: false,
-      })
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      set({ error: message, loading: false })
       throw error
     }
   },
 
-  updateAgent: async (id: string, data: Partial<Agent>) => {
+  updateAgent: async (id, updatedAgentData) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put(`/agents/${id}`, data as Record<string, unknown>)
-      const updatedAgent = response.data
+      const response = await agentsAPI.update(id, updatedAgentData)
       set((state) => ({
-        agents: state.agents.map((a) => (a.id === id ? updatedAgent : a)),
-        currentAgent: state.currentAgent?.id === id ? updatedAgent : state.currentAgent,
+        agents: state.agents.map((agent) => (agent.id === id ? response.data : agent)),
         loading: false,
       }))
+      toast.success('Oracle updated!')
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      set({
-        error: err.response?.data?.message || 'Failed to update agent',
-        loading: false,
-      })
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      set({ error: message, loading: false })
       throw error
     }
   },
 
-  deleteAgent: async (id: string) => {
+  deleteAgent: async (id) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/agents/${id}`)
+      await agentsAPI.delete(id)
       set((state) => ({
-        agents: state.agents.filter((a) => a.id !== id),
-        currentAgent: state.currentAgent?.id === id ? null : state.currentAgent,
+        agents: state.agents.filter((agent) => agent.id !== id),
         loading: false,
       }))
+      toast.success('Oracle deleted!')
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      set({
-        error: err.response?.data?.message || 'Failed to delete agent',
-        loading: false,
-      })
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      set({ error: message, loading: false })
       throw error
     }
   },
 
-  clearError: () => set({ error: null }),
+  launchAgent: async (id) => {
+    try {
+      await agentsAPI.launch(id)
+      set((state) => ({
+        agents: state.agents.map((agent) => 
+          agent.id === id ? { ...agent, status: 'ready' as const } : agent
+        ),
+      }))
+      toast.success('Oracle launched!')
+    } catch {
+      toast.error('Failed to launch oracle')
+    }
+  },
+
+  pauseAgent: async (id) => {
+    try {
+      await agentsAPI.pause(id)
+      set((state) => ({
+        agents: state.agents.map((agent) => 
+          agent.id === id ? { ...agent, status: 'paused' as const } : agent
+        ),
+      }))
+      toast.success('Oracle paused')
+    } catch {
+      toast.error('Failed to pause oracle')
+    }
+  },
+
+  terminateAgent: async (id) => {
+    try {
+      await agentsAPI.terminate(id)
+      set((state) => ({
+        agents: state.agents.map((agent) => 
+          agent.id === id ? { ...agent, status: 'terminated' as const } : agent
+        ),
+      }))
+      toast.success('Oracle terminated')
+    } catch {
+      toast.error('Failed to terminate oracle')
+    }
+  },
+
+  executeAgent: async (agentId: string, prompt: string) => {
+    set({ executing: true, error: null })
+    try {
+      const response = await executeAPI.run(agentId, prompt)
+      const execution = response.data as Execution
+      
+      set((state) => ({
+        executions: [execution, ...state.executions],
+        executing: false,
+      }))
+      
+      if (execution.status === 'completed') {
+        toast.success('Execution completed!')
+      }
+      
+      return execution
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      set({ executing: false, error: message })
+      throw error
+    }
+  },
+
+  fetchExecutions: async () => {
+    try {
+      const response = await executeAPI.list()
+      set({ executions: response.data })
+    } catch (error: unknown) {
+      console.error('Failed to fetch executions:', error)
+    }
+  },
 }))
+
+export default useAgentsStore

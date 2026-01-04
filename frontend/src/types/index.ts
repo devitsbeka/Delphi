@@ -39,6 +39,7 @@ export type AgentPurpose =
   | 'analysis'
   | 'support'
   | 'custom'
+  | 'product'
 
 export type ModelProvider = 
   | 'openai'
@@ -51,27 +52,30 @@ export interface Agent {
   name: string
   description?: string
   purpose: AgentPurpose
-  status: AgentStatus
-  modelProvider: ModelProvider
-  model: string
-  systemPrompt?: string
   goal?: string
-  organizationId?: string
-  businessId?: string
-  createdAt?: string
-  updatedAt?: string
+  model_provider: ModelProvider
+  model: string
+  status: AgentStatus
+  system_prompt?: string
+  organization_id?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface AgentExecution {
   id: string
-  agentId: string
-  task: string
+  agent_id: string
+  agent_name: string
+  prompt: string
+  response: string
   status: 'pending' | 'running' | 'completed' | 'failed'
-  output?: string
-  tokensUsed?: number
-  cost?: number
-  startedAt?: string
-  completedAt?: string
+  provider: string
+  model: string
+  tokens_used?: number
+  cost_usd?: number
+  start_time?: string
+  end_time?: string
+  error_message?: string
 }
 
 // =============================================================================
@@ -81,15 +85,11 @@ export interface AgentExecution {
 export interface Repository {
   id: string
   name: string
-  fullName: string
-  description?: string
-  language?: string
-  defaultBranch: string
-  devBranch: string
-  stagingBranch: string
-  lastSync?: string
-  indexed: boolean
-  businessId?: string
+  url: string
+  status: string
+  branch_strategy: string
+  provider?: string
+  last_sync_at?: string
 }
 
 // =============================================================================
@@ -101,10 +101,7 @@ export interface KnowledgeBase {
   name: string
   description?: string
   type: 'repository' | 'document' | 'api' | 'custom'
-  documentCount: number
-  vectorCount: number
-  lastUpdated?: string
-  size?: string
+  document_count: number
 }
 
 // =============================================================================
@@ -116,12 +113,6 @@ export interface Business {
   name: string
   description?: string
   industry?: string
-  status: 'active' | 'paused' | 'archived'
-  agents: number
-  repositories: number
-  monthlyBudget: number
-  monthlySpent: number
-  createdAt?: string
 }
 
 // =============================================================================
@@ -130,11 +121,11 @@ export interface Business {
 
 export interface CostMetric {
   id: string
-  agentId?: string
+  agent_id?: string
   provider: ModelProvider
   model: string
-  inputTokens: number
-  outputTokens: number
+  input_tokens: number
+  output_tokens: number
   cost: number
   timestamp: string
 }
@@ -147,7 +138,6 @@ export interface APIKey {
   id: string
   provider: ModelProvider
   label: string
-  isSet: boolean
-  lastUsed?: string
-  usageThisMonth?: number
+  is_set: boolean
+  last_used?: string
 }

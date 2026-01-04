@@ -1,31 +1,34 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuthStore } from '../stores/auth'
+import useAuthStore from '../stores/auth'
 
-export function Login() {
+export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const { login, loading, error, clearError } = useAuthStore()
+  const [error, setError] = useState('')
+  const { login, loading } = useAuthStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     try {
       await login(email, password)
       navigate('/')
     } catch {
-      // Error is handled in store
+      setError('Login failed. Please try again.')
     }
   }
 
   // Demo mode quick login
   const handleDemoLogin = async () => {
+    setError('')
     try {
       await login('demo@delphi.dev', 'demo')
       navigate('/')
     } catch {
-      // Error is handled in store
+      setError('Demo login failed.')
     }
   }
 
@@ -63,10 +66,7 @@ export function Login() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="input-primary w-full"
                 required
@@ -78,10 +78,7 @@ export function Login() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value)
-                  clearError()
-                }}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="input-primary w-full"
                 required

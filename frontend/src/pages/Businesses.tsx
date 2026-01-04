@@ -46,7 +46,7 @@ const mockFinancials = {
   profit: 33222.12,
 }
 
-export function Businesses() {
+export default function Businesses() {
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
 

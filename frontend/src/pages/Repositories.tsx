@@ -60,7 +60,7 @@ const languageColors: Record<string, string> = {
   Rust: '#dea584',
 }
 
-export function Repositories() {
+export default function Repositories() {
   const [search, setSearch] = useState('')
   const [businessFilter, setBusinessFilter] = useState<string>('all')
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)

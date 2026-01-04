@@ -61,7 +61,7 @@ const typeIcons: Record<string, string> = {
   custom: '⚙️',
 }
 
-export function Knowledge() {
+export default function Knowledge() {
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null)
   const [search, setSearch] = useState('')
   const [uploadModalOpen, setUploadModalOpen] = useState(false)

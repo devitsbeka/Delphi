@@ -104,7 +104,7 @@ export default function AgentCard({ agent, onLaunch, onPause, onTerminate }: Age
           {agent.purpose}
         </span>
         <span className="text-2xs text-delphi-text-muted">
-          {providerLabels[agent.modelProvider]} · {agent.model}
+          {providerLabels[agent.model_provider]} · {agent.model}
         </span>
       </div>
 

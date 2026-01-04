@@ -35,7 +35,7 @@ const mockNotifications: NotificationSetting[] = [
   { id: '5', label: 'Weekly Digest', description: 'Summary of weekly activity', email: true, slack: false, discord: false },
 ]
 
-export function Settings() {
+export default function Settings() {
   const [activeTab, setActiveTab] = useState<'api-keys' | 'notifications' | 'security' | 'billing'>('api-keys')
   const [apiKeys, setApiKeys] = useState(mockAPIKeys)
   const [notifications, setNotifications] = useState(mockNotifications)

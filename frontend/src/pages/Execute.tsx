@@ -1,280 +1,267 @@
-import { useState, useCallback, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useAgentStore } from '../stores/agents'
-import type { Agent } from '../types'
+import { useState, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
+import { PlayIcon, SparklesIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
+import useAgentsStore, { Execution } from '../stores/agents'
+import { toast } from 'react-hot-toast'
+import clsx from 'clsx'
 
-// Mock agents
-const mockAgents: Agent[] = [
-  { id: '1', name: 'Code Review Oracle', purpose: 'coding', status: 'ready', modelProvider: 'openai', model: 'gpt-4-turbo' },
-  { id: '2', name: 'Bug Fixer', purpose: 'coding', status: 'ready', modelProvider: 'anthropic', model: 'claude-3-opus' },
-  { id: '3', name: 'Content Writer', purpose: 'content', status: 'ready', modelProvider: 'openai', model: 'gpt-4-turbo' },
-  { id: '4', name: 'DevOps Agent', purpose: 'devops', status: 'ready', modelProvider: 'google', model: 'gemini-pro' },
-  { id: '5', name: 'Data Analyst', purpose: 'analysis', status: 'ready', modelProvider: 'openai', model: 'gpt-4-turbo' },
-]
+export default function Execute() {
+  const { agents, fetchAgents, executeAgent, executions, fetchExecutions, executing } = useAgentsStore()
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('')
+  const [prompt, setPrompt] = useState('')
+  const [currentExecution, setCurrentExecution] = useState<Execution | null>(null)
+  const [copied, setCopied] = useState(false)
+  const responseRef = useRef<HTMLDivElement>(null)
 
-interface ExecutionLog {
-  id: string
-  timestamp: Date
-  type: 'system' | 'agent' | 'tool' | 'error' | 'success'
-  message: string
-  metadata?: Record<string, unknown>
-}
-
-export function Execute() {
-  const [selectedAgents, setSelectedAgents] = useState<string[]>([])
-  const [task, setTask] = useState('')
-  const [context, setContext] = useState('')
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [logs, setLogs] = useState<ExecutionLog[]>([])
-  const [estimatedCost, setEstimatedCost] = useState(0)
-
-  const { agents } = useAgentStore()
-  const availableAgents = agents.length > 0 ? agents : mockAgents
-
-  // Calculate estimated cost based on selected agents and task length
   useEffect(() => {
-    const baseCost = selectedAgents.length * 0.05
-    const taskCost = (task.length / 1000) * 0.01
-    setEstimatedCost(baseCost + taskCost)
-  }, [selectedAgents, task])
+    fetchAgents()
+    fetchExecutions()
+  }, [fetchAgents, fetchExecutions])
 
-  const toggleAgent = useCallback((agentId: string) => {
-    setSelectedAgents(prev => 
-      prev.includes(agentId) 
-        ? prev.filter(id => id !== agentId)
-        : [...prev, agentId]
-    )
-  }, [])
+  useEffect(() => {
+    if (agents.length > 0 && !selectedAgentId) {
+      setSelectedAgentId(agents[0].id)
+    }
+  }, [agents, selectedAgentId])
 
-  const addLog = useCallback((type: ExecutionLog['type'], message: string, metadata?: Record<string, unknown>) => {
-    setLogs(prev => [...prev, {
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-      type,
-      message,
-      metadata,
-    }])
-  }, [])
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId)
 
-  const handleExecute = useCallback(async () => {
-    if (selectedAgents.length === 0 || !task.trim()) return
-
-    setIsExecuting(true)
-    setLogs([])
-
-    // Simulate execution with mock logs
-    addLog('system', 'Initializing execution environment...')
-    
-    await new Promise(r => setTimeout(r, 500))
-    
-    for (const agentId of selectedAgents) {
-      const agent = availableAgents.find(a => a.id === agentId)
-      if (!agent) continue
-
-      addLog('system', `Briefing Oracle: ${agent.name}`)
-      await new Promise(r => setTimeout(r, 300))
-
-      addLog('agent', `${agent.name}: Reading task context and system prompts...`, { agent: agent.name })
-      await new Promise(r => setTimeout(r, 400))
-
-      addLog('agent', `${agent.name}: Analyzing task requirements...`, { agent: agent.name })
-      await new Promise(r => setTimeout(r, 600))
-
-      addLog('tool', `${agent.name}: Querying knowledge base...`, { agent: agent.name })
-      await new Promise(r => setTimeout(r, 500))
-
-      addLog('agent', `${agent.name}: Formulating approach...`, { agent: agent.name })
-      await new Promise(r => setTimeout(r, 400))
-
-      if (agent.purpose === 'coding') {
-        addLog('tool', `${agent.name}: Reading repository files...`, { agent: agent.name })
-        await new Promise(r => setTimeout(r, 300))
-        addLog('tool', `${agent.name}: Creating feature branch...`, { agent: agent.name })
-        await new Promise(r => setTimeout(r, 200))
-      }
-
-      addLog('success', `${agent.name}: Task completed successfully`, { agent: agent.name })
-      await new Promise(r => setTimeout(r, 200))
+  const handleExecute = async () => {
+    if (!selectedAgentId || !prompt.trim()) {
+      toast.error('Please select an Oracle and provide a prompt.')
+      return
     }
 
-    addLog('system', 'All oracles have completed their tasks')
-    addLog('success', `Execution complete. Estimated cost: $${(estimatedCost * 1.2).toFixed(2)}`)
+    try {
+      const execution = await executeAgent(selectedAgentId, prompt)
+      setCurrentExecution(execution)
+      
+      // Scroll to response
+      setTimeout(() => {
+        responseRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
+    } catch (error) {
+      console.error('Execution failed:', error)
+    }
+  }
 
-    setIsExecuting(false)
-  }, [selectedAgents, task, addLog, availableAgents, estimatedCost])
+  const handleCopy = async () => {
+    if (currentExecution?.response) {
+      await navigator.clipboard.writeText(currentExecution.response)
+      setCopied(true)
+      toast.success('Copied to clipboard!')
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
-  const getLogColor = (type: ExecutionLog['type']) => {
-    switch (type) {
-      case 'system': return 'text-delphi-text-muted'
-      case 'agent': return 'text-delphi-accent'
-      case 'tool': return 'text-delphi-warning'
-      case 'error': return 'text-delphi-error'
-      case 'success': return 'text-delphi-success'
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleExecute()
     }
   }
 
   return (
-    <div className="h-full flex flex-col p-6 gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-delphi-text-primary">Execute Task</h1>
-        <p className="text-sm text-delphi-text-muted">
-          Launch one or more oracles to work on your task
-        </p>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="p-6 space-y-6 max-w-6xl mx-auto"
+    >
+      <div className="flex items-center gap-3">
+        <SparklesIcon className="w-8 h-8 text-delphi-accent-blue" />
+        <div>
+          <h1 className="text-3xl font-bold text-delphi-text-primary">Execute Oracle</h1>
+          <p className="text-delphi-text-muted">Send prompts to your AI agents and get real responses</p>
+        </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
-        {/* Left Panel - Configuration */}
-        <div className="lg:col-span-1 space-y-6 overflow-y-auto">
-          {/* Agent Selection */}
-          <div className="card">
-            <h3 className="text-lg font-semibold text-delphi-text-primary mb-4">Select Oracles</h3>
-            <div className="space-y-2">
-              {availableAgents.filter(a => a.status === 'ready').map((agent) => (
-                <button
-                  key={agent.id}
-                  onClick={() => toggleAgent(agent.id)}
-                  disabled={isExecuting}
-                  className={`w-full p-3 rounded-lg border text-left transition-colors ${
-                    selectedAgents.includes(agent.id)
-                      ? 'bg-delphi-accent/10 border-delphi-accent'
-                      : 'bg-delphi-bg-primary border-delphi-border hover:border-delphi-accent/50'
-                  } ${isExecuting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-delphi-text-primary">{agent.name}</p>
-                      <p className="text-xs text-delphi-text-muted">{agent.modelProvider} • {agent.model}</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                      selectedAgents.includes(agent.id)
-                        ? 'border-delphi-accent bg-delphi-accent'
-                        : 'border-delphi-border'
-                    }`}>
-                      {selectedAgents.includes(agent.id) && (
-                        <span className="text-white text-xs">✓</span>
-                      )}
-                    </div>
-                  </div>
-                </button>
+      {/* Agent Selection and Prompt */}
+      <div className="glass-panel p-6 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-1">
+            <label htmlFor="agent-select" className="label">Select Oracle</label>
+            <select
+              id="agent-select"
+              className="input-primary w-full"
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+            >
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name} ({agent.model_provider})
+                </option>
               ))}
-            </div>
+            </select>
           </div>
-
-          {/* Task Input */}
-          <div className="card">
-            <h3 className="text-lg font-semibold text-delphi-text-primary mb-4">Task Description</h3>
-            <textarea
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe the task you want the oracle(s) to perform..."
-              disabled={isExecuting}
-              className="input-primary w-full h-32 resize-none"
-            />
-          </div>
-
-          {/* Context */}
-          <div className="card">
-            <h3 className="text-lg font-semibold text-delphi-text-primary mb-4">Additional Context</h3>
-            <textarea
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="Any additional context, constraints, or preferences..."
-              disabled={isExecuting}
-              className="input-primary w-full h-24 resize-none"
-            />
-          </div>
-
-          {/* Cost Estimate & Execute */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-delphi-text-muted">Estimated Cost</span>
-              <span className="text-xl font-mono text-delphi-text-primary">
-                ${estimatedCost.toFixed(2)}
-              </span>
-            </div>
-            <button
-              onClick={handleExecute}
-              disabled={selectedAgents.length === 0 || !task.trim() || isExecuting}
-              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isExecuting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Executing...
-                </span>
-              ) : (
-                `Launch ${selectedAgents.length} Oracle${selectedAgents.length !== 1 ? 's' : ''}`
-              )}
-            </button>
+          <div className="md:col-span-3">
+            {selectedAgent && (
+              <div className="p-3 rounded-lg bg-delphi-bg-tertiary border border-delphi-border">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-medium text-delphi-accent-blue uppercase tracking-wider">
+                    {selectedAgent.purpose}
+                  </span>
+                  <span className="text-xs text-delphi-text-muted">•</span>
+                  <span className="text-xs text-delphi-text-muted">
+                    {selectedAgent.model_provider} / {selectedAgent.model}
+                  </span>
+                </div>
+                <p className="text-sm text-delphi-text-secondary line-clamp-2">
+                  {selectedAgent.description}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Panel - Execution Log */}
-        <div className="lg:col-span-2 card flex flex-col min-h-0">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-delphi-text-primary">Execution Log</h3>
-            {logs.length > 0 && (
-              <button
-                onClick={() => setLogs([])}
-                className="text-xs text-delphi-text-muted hover:text-delphi-text-primary transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+        <div>
+          <label htmlFor="prompt-input" className="label">Your Prompt</label>
+          <textarea
+            id="prompt-input"
+            className="input-primary w-full min-h-[150px] font-mono text-sm"
+            placeholder="Enter your task or question for the Oracle...
 
-          <div className="flex-1 bg-delphi-bg-primary rounded-lg border border-delphi-border p-4 overflow-y-auto font-mono text-sm">
-            {logs.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-delphi-text-muted">
-                <p>Select oracles and enter a task to begin execution</p>
-              </div>
-            ) : (
-              <AnimatePresence>
-                {logs.map((log) => (
-                  <motion.div
-                    key={log.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`mb-2 ${getLogColor(log.type)}`}
-                  >
-                    <span className="text-delphi-text-muted mr-2">
-                      [{log.timestamp.toLocaleTimeString()}]
-                    </span>
-                    {log.type === 'system' && <span className="text-delphi-text-muted mr-2">[SYS]</span>}
-                    {log.type === 'agent' && <span className="text-delphi-accent mr-2">[AGT]</span>}
-                    {log.type === 'tool' && <span className="text-delphi-warning mr-2">[TL]</span>}
-                    {log.type === 'error' && <span className="text-delphi-error mr-2">[ERR]</span>}
-                    {log.type === 'success' && <span className="text-delphi-success mr-2">[OK]</span>}
-                    {log.message}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            )}
-          </div>
+Example prompts:
+• Write a Go function that validates email addresses with proper error handling
+• Create a marketing campaign for a new mobile game launch
+• Analyze the financial implications of switching from AWS to Fly.io
+• Design a CI/CD pipeline for a React + Go monorepo"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <p className="text-xs text-delphi-text-muted mt-1">
+            Press ⌘+Enter to execute
+          </p>
+        </div>
 
-          {/* Execution Status Bar */}
-          {isExecuting && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-4 flex items-center gap-4"
-            >
-              <div className="flex-1 h-2 bg-delphi-bg-primary rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-delphi-accent to-delphi-success"
-                  initial={{ width: '0%' }}
-                  animate={{ width: '100%' }}
-                  transition={{ duration: 10, ease: 'linear' }}
-                />
-              </div>
-              <span className="text-sm text-delphi-text-muted">
-                Processing...
-              </span>
-            </motion.div>
+        <button
+          onClick={handleExecute}
+          disabled={executing || !selectedAgentId || !prompt.trim()}
+          className={clsx(
+            'btn-primary w-full flex items-center justify-center gap-2 py-3',
+            executing && 'opacity-75 cursor-wait'
           )}
-        </div>
+        >
+          {executing ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Processing with {selectedAgent?.model_provider}...
+            </>
+          ) : (
+            <>
+              <PlayIcon className="w-5 h-5" />
+              Execute Task
+            </>
+          )}
+        </button>
       </div>
-    </div>
+
+      {/* Response Section */}
+      {currentExecution && (
+        <motion.div
+          ref={responseRef}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-panel p-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <SparklesIcon className="w-6 h-6 text-delphi-accent-green" />
+              <div>
+                <h2 className="text-lg font-semibold text-delphi-text-primary">Response</h2>
+                <p className="text-xs text-delphi-text-muted">
+                  {currentExecution.agent_name} • {currentExecution.provider}/{currentExecution.model}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={clsx(
+                'px-2 py-1 rounded text-xs font-medium',
+                currentExecution.status === 'completed' && 'bg-green-500/20 text-green-400',
+                currentExecution.status === 'failed' && 'bg-red-500/20 text-red-400',
+                currentExecution.status === 'running' && 'bg-yellow-500/20 text-yellow-400'
+              )}>
+                {currentExecution.status}
+              </span>
+              <button
+                onClick={handleCopy}
+                className="p-2 rounded hover:bg-delphi-bg-tertiary transition-colors"
+                title="Copy response"
+              >
+                {copied ? (
+                  <CheckIcon className="w-5 h-5 text-green-400" />
+                ) : (
+                  <ClipboardDocumentIcon className="w-5 h-5 text-delphi-text-muted" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {currentExecution.status === 'failed' ? (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400">{currentExecution.error_message}</p>
+            </div>
+          ) : (
+            <div className="prose prose-invert max-w-none">
+              <pre className="whitespace-pre-wrap text-sm text-delphi-text-primary bg-delphi-bg-tertiary p-4 rounded-lg overflow-x-auto">
+                {currentExecution.response}
+              </pre>
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-delphi-border flex items-center justify-between text-xs text-delphi-text-muted">
+            <div className="flex items-center gap-4">
+              <span>Tokens: ~{currentExecution.tokens_used?.toLocaleString()}</span>
+              <span>Cost: ~${currentExecution.cost_usd?.toFixed(4)}</span>
+            </div>
+            <span>
+              {new Date(currentExecution.end_time).toLocaleString()}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Execution History */}
+      {executions.length > 0 && (
+        <div className="glass-panel p-6">
+          <h2 className="text-lg font-semibold text-delphi-text-primary mb-4">Recent Executions</h2>
+          <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+            {executions.slice(0, 10).map((exec) => (
+              <motion.div
+                key={exec.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className={clsx(
+                  'p-4 rounded-lg border cursor-pointer transition-colors',
+                  currentExecution?.id === exec.id 
+                    ? 'bg-delphi-accent-blue/10 border-delphi-accent-blue' 
+                    : 'bg-delphi-bg-tertiary border-delphi-border hover:border-delphi-border-light'
+                )}
+                onClick={() => setCurrentExecution(exec)}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-delphi-text-primary">{exec.agent_name}</span>
+                      <span className={clsx(
+                        'px-1.5 py-0.5 rounded text-2xs font-medium',
+                        exec.status === 'completed' && 'bg-green-500/20 text-green-400',
+                        exec.status === 'failed' && 'bg-red-500/20 text-red-400'
+                      )}>
+                        {exec.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-delphi-text-muted line-clamp-1">{exec.prompt}</p>
+                  </div>
+                  <span className="text-xs text-delphi-text-muted whitespace-nowrap">
+                    {new Date(exec.start_time).toLocaleTimeString()}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
   )
 }
